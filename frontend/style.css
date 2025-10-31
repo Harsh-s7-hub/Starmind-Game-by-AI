@@ -1,0 +1,89 @@
+/* style.css */
+body {
+  background: radial-gradient(circle at center, #0b0f2f, #000);
+  color: #fff;
+  font-family: 'Poppins', sans-serif;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+header {
+  padding: 20px;
+}
+
+h1 {
+  font-size: 2.5rem;
+  color: #6df3ff;
+  text-shadow: 0 0 10px #6df3ff;
+}
+
+#galaxy {
+  margin: 20px auto;
+  width: 90%;
+  height: 400px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(0,0,0,0.3));
+  border: 2px solid #6df3ff;
+  border-radius: 15px;
+  box-shadow: 0 0 25px rgba(109, 243, 255, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+
+.planet {
+  position: absolute;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.3s;
+}
+.planet:hover {
+  transform: scale(1.2);
+}
+
+#control-panel {
+  margin-top: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 20px;
+  display: inline-block;
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+select, button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+button {
+  background: #6df3ff;
+  color: #000;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+button:hover {
+  background: #00c8ff;
+  transform: translateY(-2px);
+}
+
+#ai-response {
+  margin: 20px auto;
+  width: 60%;
+}
+
+#response-box {
+  background: rgba(255,255,255,0.1);
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: 0 0 15px rgba(109, 243, 255, 0.3);
+}
+
