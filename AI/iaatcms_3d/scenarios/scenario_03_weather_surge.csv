@@ -1,0 +1,15 @@
+# scenarios/scenario_03_weather_surge.csv
+# Weather Surge - Poor weather reduces approach speed, increases separation
+# Expected KPIs: avg_delay > 45s, holding patterns increase, safe landings
+flight_id,type,fuel,weather,emergency,spawn_time,edge
+F3001,A320,75,0.7,False,0,left
+F3002,B737,70,0.75,False,3,right
+F3003,A330,65,0.8,False,6,top
+F3004,A320,80,0.7,False,10,left
+F3005,B737,60,0.85,False,14,right
+F3006,Turboprop,85,0.65,False,18,bottom
+F3007,A320,55,0.9,False,22,left
+F3008,B737,75,0.75,False,26,right
+F3009,A330,70,0.8,False,30,top
+F3010,A320,50,0.85,False,35,left
+# WEATHER_EVENT,0.8,0,60

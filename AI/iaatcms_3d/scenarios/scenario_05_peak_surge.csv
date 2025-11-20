@@ -1,0 +1,20 @@
+# scenarios/scenario_05_peak_surge.csv
+# Peak Surge + Ground Vehicle Congestion
+# Expected KPIs: taxi conflicts > 0, gate delays, high utilization, possible diversions
+flight_id,type,fuel,weather,emergency,spawn_time,edge
+F5001,A320,70,0.25,False,0,left
+F5002,B737,65,0.3,False,2,right
+F5003,A330,75,0.2,False,4,top
+F5004,Turboprop,80,0.15,False,6,bottom
+F5005,A320,60,0.35,False,8,left
+F5006,B737,55,0.4,False,10,right
+F5007,A330,85,0.2,False,12,top
+F5008,A320,50,0.45,False,14,left
+F5009,B737,75,0.25,False,16,right
+F5010,Turboprop,70,0.3,False,18,bottom
+F5011,A320,65,0.35,False,20,left
+F5012,B737,60,0.4,False,22,right
+F5013,A330,80,0.2,False,24,top
+F5014,A320,55,0.45,False,26,left
+F5015,B737,50,0.5,False,28,right
+# TAXI_CONGESTION,2,0,45

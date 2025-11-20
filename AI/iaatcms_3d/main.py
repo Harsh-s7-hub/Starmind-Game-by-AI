@@ -27,7 +27,16 @@ except Exception:
 
 import numpy as np
 
-# ---------------- Configuration & Geometry ----------------
+# Import professional airport layout system
+from airport_layout_config import (
+    SIM_W, SIM_H, TAXI_NODES, TAXI_ADJ, GATES, GATE_POS, KB,
+    RUNWAY_MAIN, RUNWAY_SECONDARY
+)
+from airport_drawing import draw_complete_airport_layout, get_runway_threshold_position
+
+# ---------------------------
+# Configuration & geometry
+# ---------------------------
 SIM_W, SIM_H = 1100, 700
 FPS = 60
 
@@ -37,39 +46,41 @@ RUNWAY1_X = (SIM_W // 2) - (RUNWAY_LEN // 2)
 RUNWAY1_Y = 110
 RUNWAY2_X = RUNWAY1_X
 RUNWAY2_Y = RUNWAY1_Y + 170
+
 GATE_Y = RUNWAY2_Y + 190
 
+# Taxi nodes (explicit labels show where T_A, T_B... are)
 TAXI_NODES = {
-    "RWY1_EXIT": (RUNWAY1_X + RUNWAY_LEN - 56, RUNWAY1_Y + RUNWAY_W // 2 + 6),
+    "RWY1_EXIT": (RUNWAY1_X + RUNWAY_LEN - 56, RUNWAY1_Y + RUNWAY_W//2 + 6),
     "T_A": (RUNWAY1_X + 150, RUNWAY1_Y + 80),
-    "T_B": (RUNWAY1_X + 320, RUNWAY1_Y + 80),
-    "T_C": (RUNWAY1_X + 480, RUNWAY1_Y + 80),
-    "T_D": (RUNWAY1_X + 640, RUNWAY1_Y + 80),
-    "RWY2_EXIT": (RUNWAY2_X + RUNWAY_LEN - 56, RUNWAY2_Y + RUNWAY_W // 2 + 6),
-    "G1": (RUNWAY1_X + 150, GATE_Y),
-    "G2": (RUNWAY1_X + 280, GATE_Y),
-    "G3": (RUNWAY1_X + 410, GATE_Y),
-    "G4": (RUNWAY1_X + 540, GATE_Y),
-    "G5": (RUNWAY1_X + 670, GATE_Y),
+    "T_B": (RUNWAY1_X + 340, RUNWAY1_Y + 80),
+    "T_C": (RUNWAY1_X + 520, RUNWAY1_Y + 80),
+    "T_D": (RUNWAY1_X + 660, RUNWAY1_Y + 80),
+    "RWY2_EXIT": (RUNWAY2_X + RUNWAY_LEN - 56, RUNWAY2_Y + RUNWAY_W//2 + 6),
+    "G1": (RUNWAY1_X + 140, GATE_Y),
+    "G2": (RUNWAY1_X + 270, GATE_Y),
+    "G3": (RUNWAY1_X + 400, GATE_Y),
+    "G4": (RUNWAY1_X + 530, GATE_Y),
+    "G5": (RUNWAY1_X + 660, GATE_Y),
 }
 
 TAXI_ADJ = {
     "RWY1_EXIT": ["T_A"],
-    "T_A": ["RWY1_EXIT", "T_B", "G1"],
-    "T_B": ["T_A", "T_C", "G2"],
-    "T_C": ["T_B", "T_D", "G3"],
-    "T_D": ["T_C", "RWY2_EXIT", "G4", "G5"],
+    "T_A": ["RWY1_EXIT","T_B","G1"],
+    "T_B": ["T_A","T_C","G2"],
+    "T_C": ["T_B","T_D","G3"],
+    "T_D": ["T_C","RWY2_EXIT","G4","G5"],
     "RWY2_EXIT": ["T_D"],
     "G1": ["T_A"], "G2": ["T_B"], "G3": ["T_C"], "G4": ["T_D"], "G5": ["T_D"]
 }
 
-GATES = ["G1", "G2", "G3", "G4", "G5"]
+GATES = ["G1","G2","G3","G4","G5"]
 GATE_POS = {g: TAXI_NODES[g] for g in GATES}
 
 KB = {
-    "airport_name": "IAATCMS - Intelligent Airport",
-    "runways": {"RWY1": {"len_m": 3400}, "RWY2": {"len_m": 3100}},
-    "gates": {g: {"size": "medium"} for g in GATES},
+    "airport_name": "IAATCMS - Advanced Demo",
+    "runways": {"RWY1": {"len_m":3500}, "RWY2": {"len_m":3200}},
+    "gates": {g: {"size": "large" if i<2 else "medium" if i<4 else "small"} for i,g in enumerate(GATES)},
     "taxi_nodes": TAXI_NODES
 }
 
@@ -79,8 +90,10 @@ HOLD_RADIUS = 45
 APPROACH_STEPS = 160
 TAXI_SPEED = 70
 APPROACH_SPEED = 160
-RUNWAY_SEP_SEC = 6.5
-EMERGENCY_PROB = 0.10
+RUNWAY_SEP_SEC = 6.0
+
+# Emergency spawn probability per spawn (0.0-1.0)
+EMERGENCY_PROB = 0.08
 
 # ---------------- Utilities ----------------
 def dist(a, b):
@@ -109,15 +122,14 @@ def smooth_path(pts, iterations=2):
         p = q
     return p
 
-# ---------------- Fuzzy Priority ----------------
-def tri(x, a, b, c):
-    if x <= a or x >= c:
-        return 0.0
-    if x == b:
-        return 1.0
-    if x < b:
-        return (x - a) / (b - a)
-    return (c - x) / (c - b)
+# ---------------------------
+# Fuzzy priority (same as before)
+# ---------------------------
+def tri(x,a,b,c):
+    if x <= a or x >= c: return 0.0
+    if x == b: return 1.0
+    if x < b: return (x-a)/(b-a)
+    return (c-x)/(c-b)
 
 def fuzzy_priority(fuel_pct, weather, emergency=False):
     if emergency:
@@ -307,6 +319,18 @@ class PygameSim:
         pygame.display.set_caption("IAATCMS Simulation")
         self.clock = pygame.time.Clock()
 
+        # Load grass texture
+        self.grass_texture = None
+        grass_path = os.path.join(os.path.dirname(__file__), "assets", "grass_texture.jpg")
+        if os.path.exists(grass_path):
+            try:
+                self.grass_texture = pygame.image.load(grass_path)
+                # Scale to tile nicely
+                self.grass_texture = pygame.transform.scale(self.grass_texture, (200, 200))
+            except Exception as e:
+                print(f"Could not load grass texture: {e}")
+                self.grass_texture = None
+
         self.flights = []
         self.logs = deque(maxlen=2000)
         self.auto_spawn = False
@@ -315,38 +339,43 @@ class PygameSim:
         self.auto_decision_threshold = 0.55
         self.last_spawn = time.time()
         self.last_schedule = time.time()
-        self.runway_busy_until = {"RWY1": 0.0, "RWY2": 0.0}
-        self.running = True
+        self.runway_busy_until = {"RWY1":0.0, "RWY2":0.0}
+        self.runway_sep = RUNWAY_SEP_SEC
         self.tk_root = None
         self.tk_callback = None
+        self.running = True
+        self.radar_angle = 0.0
+
+        # funnels
         self.funnels = {
-            "RWY1": {"start": (-140, RUNWAY1_Y + 40), "mid": (RUNWAY1_X + RUNWAY_LEN / 2, RUNWAY1_Y + 180), "threshold": (RUNWAY1_X + 40, RUNWAY1_Y + RUNWAY_W // 2)},
-            "RWY2": {"start": (self.width + 140, RUNWAY2_Y + 40), "mid": (RUNWAY2_X + RUNWAY_LEN / 2, RUNWAY2_Y + 180), "threshold": (RUNWAY2_X + 40, RUNWAY2_Y + RUNWAY_W // 2)}
+            "RWY1": {"start": (-140, RUNWAY1_Y+40), "mid": (RUNWAY1_X + RUNWAY_LEN/2, RUNWAY1_Y + 190), "threshold": (RUNWAY1_X + 40, RUNWAY1_Y + RUNWAY_W//2)},
+            "RWY2": {"start": (self.width+140, RUNWAY2_Y+40), "mid": (RUNWAY2_X + RUNWAY_LEN/2, RUNWAY2_Y + 190), "threshold": (RUNWAY2_X + 40, RUNWAY2_Y + RUNWAY_W//2)}
         }
+
         self._start_thread()
 
     def log(self, s):
         self.logs.appendleft(f"[{time.strftime('%H:%M:%S')}] {s}")
 
-    def choose_runway(self):
-        return random.choice(["RWY1", "RWY2"])
+    def choose_runway_by_wind(self):
+        return random.choice(["RWY1","RWY2"])
 
     def spawn_flight(self, ftype=None, emergency=None, prefer_runway=None):
-        typ = ftype if ftype else random.choice(["A320", "B737", "A330", "Turboprop"])
-        if emergency is None:
-            emergency = (random.random() < EMERGENCY_PROB)
-        edge = random.choice(["left", "right", "top", "bottom"])
-        r = prefer_runway if prefer_runway else self.choose_runway()
+        typ = ftype if ftype else random.choice(["A320","B737","A330","Turboprop"])
+        if emergency is None: emergency = (random.random() < EMERGENCY_PROB)
+        edge = random.choice(["left","right","top","bottom"])
+        r = prefer_runway if prefer_runway else self.choose_runway_by_wind()
         if edge == "left":
-            start = (-140 + random.uniform(-10, 10), random.randint(80, self.height - 80))
+            start = (-140 + random.uniform(-10,10), random.randint(80, self.height-80))
         elif edge == "right":
-            start = (self.width + 140 + random.uniform(-10, 10), random.randint(80, self.height - 80))
+            start = (self.width+140 + random.uniform(-10,10), random.randint(80, self.height-80))
         elif edge == "top":
-            start = (random.randint(80, self.width - 80), -140 + random.uniform(-10, 10))
+            start = (random.randint(80,self.width-80), -140 + random.uniform(-10,10))
         else:
-            start = (random.randint(80, self.width - 80), self.height + 140 + random.uniform(-10, 10))
+            start = (random.randint(80,self.width-80), self.height+140 + random.uniform(-10,10))
+
         funnel = self.funnels[r]
-        mid = (funnel["mid"][0] + random.uniform(-60, 60), funnel["mid"][1] + random.uniform(-30, 30))
+        mid = (funnel["mid"][0] + random.uniform(-80,80), funnel["mid"][1] + random.uniform(-30,30))
         thresh = funnel["threshold"]
         path = quad_bezier(start, mid, thresh, steps=APPROACH_STEPS)
         path = smooth_path(path, iterations=2)
@@ -363,7 +392,7 @@ class PygameSim:
         if not to_sched:
             self.log("CSP: none")
             return {}
-        cs = CSP_Scheduler(to_sched, ["RWY1", "RWY2"], GATES, separation_slots=1)
+        cs = CSP_Scheduler(to_sched, ["RWY1","RWY2"], GATES, separation_slots=1)
         sol = cs.solve()
         if not sol:
             self.log("CSP: no solution")
@@ -384,8 +413,7 @@ class PygameSim:
         return False
 
     def step(self, dt):
-        # auto spawn / schedule
-        if self.auto_spawn and time.time() - self.last_spawn > 2.6:
+        if self.auto_spawn and time.time() - self.last_spawn > 2.8:
             self.spawn_flight(); self.last_spawn = time.time()
         if self.auto_schedule and time.time() - self.last_schedule > 6.0:
             self.run_csp(); self.last_schedule = time.time()
@@ -449,18 +477,19 @@ class PygameSim:
                     fl.state = "requesting"
             elif fl.state == "requesting":
                 runway = getattr(fl, "target_runway", "RWY1")
-                if time.time() < self.runway_busy_until.get(runway, 0.0):
-                    fl.state = "holding"; fl.hold_center = (fl.pos[0], fl.pos[1] - 80); fl.hold_angle = 0.0; self.log(f"{fl.id} to hold (busy)")
+                if time.time() < self.runway_busy_until.get(runway,0.0):
+                    fl.state = "holding"; fl.hold_center = (fl.pos[0], fl.pos[1]-80); fl.hold_angle = 0.0
+                    self.log(f"{fl.id} to hold (busy)")
+                pass
+
             elif fl.state == "landing":
-                # rollout progression along runway
                 if fl.landed_runway == "RWY1":
-                    fl.pos = (fl.pos[0] + 160 * dt, fl.pos[1])
-                    if fl.pos[0] > RUNWAY1_X + RUNWAY_LEN * 0.6:
-                        fl.state = "rollout"
+                    fl.pos = (fl.pos[0] + 160*dt, fl.pos[1])
+                    if fl.pos[0] > RUNWAY1_X + RUNWAY_LEN*0.6: fl.state = "rollout"
                 else:
-                    fl.pos = (fl.pos[0] + 160 * dt, fl.pos[1])
-                    if fl.pos[0] > RUNWAY2_X + RUNWAY_LEN * 0.6:
-                        fl.state = "rollout"
+                    fl.pos = (fl.pos[0] + 160*dt, fl.pos[1])
+                    if fl.pos[0] > RUNWAY2_X + RUNWAY_LEN*0.6: fl.state = "rollout"
+
             elif fl.state == "rollout":
                 # Ensure assigned: if not, run CSP auto-assign now
                 if not fl.assigned:
@@ -475,7 +504,7 @@ class PygameSim:
                                 ff.assigned = val
                 # compute taxi path
                 if fl.assigned and not fl.taxi_path:
-                    exit_node = "RWY1_EXIT" if getattr(fl, "landed_runway", "RWY1") == "RWY1" else "RWY2_EXIT"
+                    exit_node = "RWY1_EXIT" if fl.landed_runway == "RWY1" else "RWY2_EXIT"
                     gate_node = fl.assigned[1]
                     p = a_star_taxi(exit_node, gate_node, blocked=set())
                     if p:
@@ -518,48 +547,53 @@ class PygameSim:
                 self.flights.remove(r)
 
     def draw(self):
-        # background and grass
-        self.screen.fill((12, 18, 36))
-        pygame.draw.rect(self.screen, (28, 140, 58), (0, RUNWAY1_Y - 140, self.width, RUNWAY2_Y + RUNWAY_W - (RUNWAY1_Y - 140) + 260))
-        # runways
+        self.screen.fill((12,18,36))
+        pygame.draw.rect(self.screen, (28,140,58), (0, RUNWAY1_Y - 140, self.width, RUNWAY2_Y + RUNWAY_W - (RUNWAY1_Y - 140) + 260))
         r1 = (RUNWAY1_X, RUNWAY1_Y, RUNWAY_LEN, RUNWAY_W)
         r2 = (RUNWAY2_X, RUNWAY2_Y, RUNWAY_LEN, RUNWAY_W)
-        pygame.draw.rect(self.screen, (50, 50, 50), r1, border_radius=12)
-        pygame.draw.rect(self.screen, (50, 50, 50), r2, border_radius=12)
-        for rx, ry in ((RUNWAY1_X, RUNWAY1_Y), (RUNWAY2_X, RUNWAY2_Y)):
-            for s in range(20, RUNWAY_LEN - 20, 64):
-                pygame.draw.rect(self.screen, (230, 230, 230), (rx + s, ry + RUNWAY_W // 2 - 5, 30, 10), border_radius=3)
-        # taxiways with improved visual
-        for a, b in [("RWY1_EXIT", "T_A"), ("T_A", "T_B"), ("T_B", "T_C"), ("T_C", "T_D"), ("T_D", "RWY2_EXIT")]:
+        pygame.draw.rect(self.screen, (50,50,50), r1, border_radius=12); pygame.draw.rect(self.screen, (50,50,50), r2, border_radius=12)
+        for rx, ry in ((RUNWAY1_X, RUNWAY1_Y),(RUNWAY2_X, RUNWAY2_Y)):
+            for s in range(20, RUNWAY_LEN-20, 64):
+                pygame.draw.rect(self.screen, (230,230,230), (rx + s, ry + RUNWAY_W//2 -5, 30, 10), border_radius=3)
+        # taxiways and centerlines
+        for a,b in [("RWY1_EXIT","T_A"),("T_A","T_B"),("T_B","T_C"),("T_C","T_D"),("T_D","RWY2_EXIT")]:
             if a in TAXI_NODES and b in TAXI_NODES:
-                pygame.draw.line(self.screen, (120, 120, 120), TAXI_NODES[a], TAXI_NODES[b], 14)
-                pygame.draw.line(self.screen, (80, 80, 80), TAXI_NODES[a], TAXI_NODES[b], 6)
+                pygame.draw.line(self.screen, (120,120,120), TAXI_NODES[a], TAXI_NODES[b], 14)
+                pygame.draw.line(self.screen, (80,80,80), TAXI_NODES[a], TAXI_NODES[b], 6)
         # gates and labels
         font_sm = pygame.font.SysFont("Arial", 12)
-        for g, p in GATE_POS.items():
-            pygame.draw.rect(self.screen, (220, 220, 220), (p[0] - 20, p[1] - 12, 40, 26), border_radius=4)
-            self.screen.blit(font_sm.render(g, True, (20, 20, 20)), (p[0] - 10, p[1] - 10))
-        # taxi nodes & labels
-        for name, coord in TAXI_NODES.items():
-            pygame.draw.circle(self.screen, (70, 70, 70), (int(coord[0]), int(coord[1])), 6)
+        for g,p in GATE_POS.items():
+            pygame.draw.rect(self.screen, (220,220,220), (p[0]-20, p[1]-12, 40, 26), border_radius=4)
+            self.screen.blit(font_sm.render(g, True, (20,20,20)), (p[0]-10, p[1]-10))
+        # taxi nodes & labels (explicitly mark T_A, T_B etc)
+        for name,coord in TAXI_NODES.items():
+            pygame.draw.circle(self.screen, (70,70,70), (int(coord[0]), int(coord[1])), 6)
+            # show label for T_* and RWY exits and G*
             if name.startswith("T_") or name.endswith("_EXIT") or name.startswith("G"):
-                lbl = font_sm.render(name, True, (240, 240, 240))
-                self.screen.blit(lbl, (coord[0] + 8, coord[1] - 8))
+                lbl = font_sm.render(name, True, (240,240,240))
+                self.screen.blit(lbl, (coord[0]+8, coord[1]-8))
         # flights
         now = time.time()
-        font_sm = pygame.font.SysFont("Arial", 12)
+        font_sm = pygame.font.SysFont("Arial", 11, bold=True)
+        font_state = pygame.font.SysFont("Arial", 9)
+        
         for fl in self.flights:
-            x, y = int(fl.pos[0]), int(fl.pos[1])
-            col = (255, 60, 60) if fl.emergency else (30, 130, 220)
-            size = 6 + int(6 * fl.priority)
-            if fl.highlight_until > now:
-                halo_col = (255, 200, 50) if fl.emergency else (50, 200, 255)
-                pygame.draw.circle(self.screen, halo_col, (x, y), size + 10, 2)
-            pygame.draw.circle(self.screen, (0, 0, 0), (x, y), size + 2)
-            pygame.draw.circle(self.screen, col, (x, y), size)
-            self.screen.blit(font_sm.render(fl.id, True, (255, 255, 255)), (x + size + 6, y - size - 6))
-            self.screen.blit(font_sm.render(fl.state, True, (220, 220, 220)), (x + size + 6, y + 2))
-        # logs overlay (small)
+            x,y = int(fl.pos[0]), int(fl.pos[1])
+            col = (255,60,60) if fl.emergency else (30,30,30)
+            size = 6 + int(6*fl.priority)
+            # highlight if selected or recently cleared
+            is_highlight = (fl.highlight_until > now)
+            if is_highlight:
+                # flashing halo
+                alpha = int(128 + 127 * math.sin(now*10))
+                # draw halo as circle with varying brightness
+                halo_col = (255, 200, 50) if fl.emergency else (50,200,255)
+                pygame.draw.circle(self.screen, halo_col, (x,y), size+10, 2)
+            pygame.draw.circle(self.screen, (0,0,0), (x,y), size+2)
+            pygame.draw.circle(self.screen, col, (x,y), size)
+            self.screen.blit(font_sm.render(fl.id, True, (255,255,255)), (x + size + 6, y - size - 6))
+            self.screen.blit(font_sm.render(fl.state, True, (220,220,220)), (x + size + 6, y + 2))
+        # logs overlay
         font_mono = pygame.font.SysFont("Consolas", 12)
         ly = 6
         for line in list(self.logs)[:6]:
@@ -607,37 +641,45 @@ class MainApp:
         root.title("IAATCMS — Intelligent Airport (Option B)")
         root.geometry("1500x900")
 
+        # Notebook tabs
         self.notebook = ttk.Notebook(root); self.notebook.pack(fill="both", expand=True)
-        self.tab_sim = ttk.Frame(self.notebook); self.tab_radar = ttk.Frame(self.notebook)
-        self.tab_dash = ttk.Frame(self.notebook); self.tab_logs = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_sim, text="Simulation"); self.notebook.add(self.tab_radar, text="Radar")
-        self.notebook.add(self.tab_dash, text="Dashboard"); self.notebook.add(self.tab_logs, text="Logs")
+        self.tab_sim = ttk.Frame(self.notebook); self.notebook.add(self.tab_sim, text="Simulation")
+        self.tab_radar = ttk.Frame(self.notebook); self.notebook.add(self.tab_radar, text="Radar")
+        self.tab_dash = ttk.Frame(self.notebook); self.notebook.add(self.tab_dash, text="Dashboard")
+        self.tab_logs = ttk.Frame(self.notebook); self.notebook.add(self.tab_logs, text="Logs")
 
-        # Left controls / center sim / right info
+        # Simulation tab layout: left controls, center sim, right info
         left = ttk.Frame(self.tab_sim, width=320); left.pack(side="left", fill="y", padx=6, pady=6)
         center = ttk.Frame(self.tab_sim); center.pack(side="left", fill="both", expand=True, padx=6, pady=6)
         right = ttk.Frame(self.tab_sim, width=360); right.pack(side="right", fill="y", padx=6, pady=6)
 
-        ttk.Label(left, text="ATC Controls", font=("Arial", 14, "bold")).pack(pady=6)
+        # left controls
+        ttk.Label(left, text="ATC Controls", font=("Arial",14,"bold")).pack(pady=6)
         ttk.Button(left, text="Spawn Flight", command=self.spawn_click).pack(fill="x", pady=4)
         ttk.Button(left, text="Spawn Emergency Flight", command=lambda: self.spawn_click(emergency=True)).pack(fill="x", pady=4)
         ttk.Button(left, text="Run CSP Scheduler", command=self.run_csp_click).pack(fill="x", pady=4)
         self.auto_spawn_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(left, text="Auto Spawn", variable=self.auto_spawn_var, command=self.toggle_auto_spawn).pack(anchor="w", pady=2)
+        auto_spawn_check = tk.Checkbutton(auto_card, text="⚡ Auto Spawn", variable=self.auto_spawn_var, 
+                                         command=self.toggle_auto_spawn,
+                                         bg='#252d3d', fg='#ffffff', selectcolor='#2d3548',
+                                         activebackground='#252d3d', activeforeground='#3498db',
+                                         font=("Segoe UI", 10))
+        auto_spawn_check.pack(anchor="w", padx=10, pady=3)
+        
         self.auto_schedule_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(left, text="Auto Schedule", variable=self.auto_schedule_var, command=self.toggle_auto_schedule).pack(anchor="w", pady=2)
         ttk.Separator(left).pack(fill="x", pady=6)
-        ttk.Label(left, text="Auto Decision (AI)", font=("Arial", 11)).pack(pady=(4, 0))
+        ttk.Label(left, text="Auto Decision (AI)", font=("Arial",11)).pack(pady=(4,0))
         self.auto_decision_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(left, text="Enable Auto Decision", variable=self.auto_decision_var, command=self.toggle_auto_decision).pack(anchor="w")
-        ttk.Label(left, text="Threshold (0.0 - 1.0)").pack(anchor="w", pady=(6, 0))
+        ttk.Label(left, text="Threshold (0.0 - 1.0)").pack(anchor="w", pady=(6,0))
         self.threshold_var = tk.DoubleVar(value=0.55)
         ttk.Scale(left, from_=0.0, to=1.0, variable=self.threshold_var, orient="horizontal").pack(fill="x", pady=2)
         ttk.Separator(left).pack(fill="x", pady=6)
         ttk.Button(left, text="Optimize Order (GA)", command=self.run_ga).pack(fill="x", pady=4)
         ttk.Button(left, text="Export Schedule CSV", command=self.export_csv).pack(fill="x", pady=4)
         ttk.Button(left, text="Intelligent System Design (report)", command=self.show_intel_design).pack(fill="x", pady=8)
-        ttk.Label(left, text="Taxi nodes: T_A → T_B → T_C → T_D", foreground="#555").pack(pady=(8,0))
+        ttk.Label(left, text="Taxi nodes (map): T_A → T_B → T_C → T_D", foreground="#555").pack(pady=(8,0))
 
         sim_container = tk.Frame(center, width=SIM_W, height=SIM_H, bg="black")
         sim_container.pack(); sim_container.pack_propagate(False)
@@ -645,16 +687,18 @@ class MainApp:
         # integrate tk callbacks so sim can create dialogs
         self.sim.integrate_tk(self.root, lambda fn: self.root.after(1, fn))
 
-        ttk.Label(right, text="Flights", font=("Arial", 12, "bold")).pack(pady=6)
+        # right: flight list + selection
+        ttk.Label(right, text="Flights", font=("Arial",12,"bold")).pack(pady=6)
         self.flight_listbox = tk.Listbox(right, width=44, height=28)
         self.flight_listbox.pack()
         self.flight_listbox.bind("<<ListboxSelect>>", self.on_select_flight)
         ttk.Button(right, text="Highlight Selected", command=self.highlight_selected).pack(fill="x", pady=6)
         ttk.Separator(right).pack(fill="x", pady=6)
-        ttk.Label(right, text="Logs / Live Info", font=("Arial", 12, "bold")).pack(pady=6)
-        self.logs_text = tk.Text(right, width=44, height=12); self.logs_text.pack()
+        ttk.Label(right, text="Logs / Live Info", font=("Arial",12,"bold")).pack(pady=6)
+        self.logs_text = tk.Text(right, width=44, height=12)
+        self.logs_text.pack()
 
-        # Radar tab
+        # Radar tab: canvas + click binding
         self.radar_canvas = tk.Canvas(self.tab_radar, width=760, height=760, bg="black")
         self.radar_canvas.pack(padx=10, pady=10)
         self.radar_canvas.bind("<Button-1>", self.on_radar_click)
@@ -662,43 +706,51 @@ class MainApp:
         # Dashboard tab (inline matplotlib)
         if MATPLOTLIB_AVAILABLE:
             self.fig = Figure(figsize=(10,6), dpi=100)
-            self.ax1 = self.fig.add_subplot(221); self.ax2 = self.fig.add_subplot(222)
-            self.ax3 = self.fig.add_subplot(223); self.ax4 = self.fig.add_subplot(224)
+            self.ax1 = self.fig.add_subplot(221)
+            self.ax2 = self.fig.add_subplot(222)
+            self.ax3 = self.fig.add_subplot(223)
+            self.ax4 = self.fig.add_subplot(224)
             self.canvas_fig = FigureCanvasTkAgg(self.fig, master=self.tab_dash)
             self.canvas_fig.get_tk_widget().pack(fill="both", expand=True)
         else:
-            ttk.Label(self.tab_dash, text="matplotlib not installed. Install via pip.").pack(pady=20)
+            ttk.Label(self.tab_dash, text="matplotlib not installed. Install to see inline dashboard.").pack(pady=20)
             self.canvas_fig = None
 
-        ttk.Label(self.tab_logs, text="System Logs", font=("Arial", 12, "bold")).pack(pady=6)
-        self.full_logs = tk.Text(self.tab_logs, width=200, height=40); self.full_logs.pack()
+        # Logs tab: full logs
+        ttk.Label(self.tab_logs, text="System Logs", font=("Arial",12,"bold")).pack(pady=6)
+        self.full_logs = tk.Text(self.tab_logs, width=200, height=40)
+        self.full_logs.pack()
 
         # schedule updates
         self.root.after(600, self.ui_update); self.root.after(120, self.radar_update)
 
-    # ---------------- UI Callbacks ----------------
+    # UI callbacks
     def spawn_click(self, emergency=False):
-        f = self.sim.spawn_flight(emergency=emergency)
-        self.append_log(f"Spawn {f.id} EMG={f.emergency}")
-        self.refresh_flight_list()
+        f = self.sim.spawn_flight(emergency=emergency); self.append_log(f"Spawn {f.id} EMG={f.emergency}"); self.refresh_flight_list()
 
     def run_csp_click(self):
         sol = self.sim.run_csp()
-        if sol:
-            self.append_log("CSP assigned"); self.refresh_flight_list()
-        else:
-            self.append_log("CSP had no solution")
+        if sol: self.append_log("CSP assigned"); self.refresh_flight_list()
+        else: self.append_log("CSP had no solution")
 
     def toggle_auto_spawn(self):
-        self.sim.auto_spawn = self.auto_spawn_var.get(); self.append_log(f"Auto spawn {self.sim.auto_spawn}")
+        self.sim.auto_spawn = self.auto_spawn_var.get()
+        self.append_log(f"Auto spawn {self.sim.auto_spawn}")
+        status = "AUTO SPAWN ENABLED" if self.sim.auto_spawn else "AUTO SPAWN DISABLED"
+        self.update_status(status, '#3498db' if self.sim.auto_spawn else '#95a5a6')
 
     def toggle_auto_schedule(self):
-        self.sim.auto_schedule = self.auto_schedule_var.get(); self.append_log(f"Auto schedule {self.sim.auto_schedule}")
+        self.sim.auto_schedule = self.auto_schedule_var.get()
+        self.append_log(f"Auto schedule {self.sim.auto_schedule}")
+        status = "AUTO SCHEDULE ENABLED" if self.sim.auto_schedule else "AUTO SCHEDULE DISABLED"
+        self.update_status(status, '#3498db' if self.sim.auto_schedule else '#95a5a6')
 
     def toggle_auto_decision(self):
         self.sim.auto_decision_flag = self.auto_decision_var.get()
         self.sim.auto_decision_threshold = float(self.threshold_var.get())
         self.append_log(f"Auto decision {self.sim.auto_decision_flag} thr={self.sim.auto_decision_threshold}")
+        status = "AI DECISION ENABLED" if self.sim.auto_decision_flag else "AI DECISION DISABLED"
+        self.update_status(status, '#9b59b6' if self.sim.auto_decision_flag else '#95a5a6')
 
     def run_ga(self):
         ids = [f.id for f in self.sim.flights if f.state in ("approaching", "holding", "requesting", "taxiing")]
@@ -752,9 +804,11 @@ class MainApp:
     def refresh_flight_list(self):
         self.flight_listbox.delete(0, tk.END)
         for f in self.sim.flights:
-            tag = " EMG" if f.emergency else ""
+            tag = " 🚨" if f.emergency else ""
             ass = f.assigned[0] if f.assigned else "None"
             self.flight_listbox.insert(tk.END, f"{f.id} | {f.type} | pr:{f.priority:.2f} | {f.state} | {ass}{tag}")
+        # Update flight count badge
+        self.update_flight_count()
 
     def on_select_flight(self, evt):
         sel = self.flight_listbox.curselection()
