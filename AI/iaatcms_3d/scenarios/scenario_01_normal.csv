@@ -1,0 +1,12 @@
+# scenarios/scenario_01_normal.csv
+# Normal Traffic - Baseline scenario
+# Expected KPIs: avg_delay < 30s, diversions = 0, utilization > 60%
+flight_id,type,fuel,weather,emergency,spawn_time,edge
+F1001,A320,75,0.2,False,0,left
+F1002,B737,60,0.3,False,5,right
+F1003,A330,85,0.1,False,8,top
+F1004,Turboprop,50,0.25,False,12,bottom
+F1005,A320,70,0.15,False,18,left
+F1006,B737,65,0.35,False,22,right
+F1007,A320,80,0.2,False,28,left
+F1008,Turboprop,55,0.3,False,35,bottom

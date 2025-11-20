@@ -1,0 +1,15 @@
+# scenarios/scenario_02_runway_closure.csv
+# Runway Closure - RWY2 closes at t=30s
+# Expected KPIs: avg_delay increases, RWY1 utilization > 90%, diversions possible
+flight_id,type,fuel,weather,emergency,spawn_time,edge
+F2001,A320,70,0.2,False,0,left
+F2002,B737,65,0.25,False,4,right
+F2003,A330,80,0.15,False,8,top
+F2004,A320,60,0.3,False,12,left
+F2005,B737,55,0.35,False,16,right
+F2006,Turboprop,75,0.2,False,20,bottom
+F2007,A320,50,0.4,False,25,left
+F2008,A330,85,0.15,False,30,top
+F2009,B737,45,0.45,False,35,right
+F2010,A320,40,0.5,False,40,left
+# RUNWAY_CLOSURE,RWY2,30,60

@@ -1,0 +1,13 @@
+# scenarios/scenario_04_emergency.csv
+# Emergency Flight - Low fuel critical landing
+# Expected KPIs: emergency_handled > 0, priority aircraft lands first, no diversions for emergency
+flight_id,type,fuel,weather,emergency,spawn_time,edge
+F4001,A320,85,0.15,False,0,left
+F4002,B737,75,0.2,False,4,right
+F4003,A330,12,0.3,True,8,top
+F4004,A320,70,0.25,False,10,left
+F4005,B737,65,0.3,False,14,right
+F4006,Turboprop,8,0.2,True,18,bottom
+F4007,A320,80,0.15,False,22,left
+F4008,B737,60,0.35,False,26,right
+F4009,A330,15,0.4,True,30,top
